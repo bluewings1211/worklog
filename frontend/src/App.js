@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import { DndContext, closestCenter, useDroppable } from '@dnd-kit/core';
@@ -19,6 +19,10 @@ function App() {
   const [form, setForm] = useState({ project_code: '', task_type: '', description: '' });
   const [error, setError] = useState('');
   const [draggingTodo, setDraggingTodo] = useState(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryJson, setSummaryJson] = useState('');
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const summaryRef = useRef();
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -101,6 +105,30 @@ function App() {
     }
   };
 
+  // 工時結算功能
+  const handleSummary = async () => {
+    setSummaryLoading(true);
+    try {
+      const res = await fetch('/api/summary/today');
+      const data = await res.json();
+      const jsonStr = JSON.stringify(data, null, 2);
+      setSummaryJson(jsonStr);
+      setShowSummary(true);
+      // 複製到剪貼簿
+      await navigator.clipboard.writeText(jsonStr);
+    } catch (e) {
+      setError('工時結算失敗');
+    }
+    setSummaryLoading(false);
+  };
+
+  // 複製當前 summaryJson
+  const handleCopySummary = async () => {
+    if (summaryJson) {
+      await navigator.clipboard.writeText(summaryJson);
+    }
+  };
+
   return (
     <div className="App">
       <h1>工作待辦清單</h1>
@@ -169,6 +197,40 @@ function App() {
             <DroppableDeleteColumn id={DELETE_KEY} label="Delete" />
           </div>
         </DndContext>
+      )}
+      <div style={{ margin: '24px 0' }}>
+        <button onClick={handleSummary} disabled={summaryLoading}>
+          {summaryLoading ? '結算中...' : '結算本日工時'}
+        </button>
+      </div>
+      {showSummary && (
+        <div style={{
+          position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh',
+          background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}
+          onClick={() => setShowSummary(false)}
+        >
+          <div
+            style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 400, minHeight: 300, maxWidth: 600, boxShadow: '0 2px 16px #0002', position: 'relative' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>本日工時 JSON</b>
+              <button onClick={handleCopySummary} title="複製到剪貼簿" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>
+                📋
+              </button>
+            </div>
+            <textarea
+              ref={summaryRef}
+              value={summaryJson}
+              onChange={e => setSummaryJson(e.target.value)}
+              style={{ width: '100%', height: 240, fontFamily: 'monospace', fontSize: 15, border: '1px solid #ccc', borderRadius: 4, padding: 8 }}
+            />
+            <div style={{ textAlign: 'right', marginTop: 8 }}>
+              <button onClick={() => setShowSummary(false)}>關閉</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

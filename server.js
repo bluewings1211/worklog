@@ -82,17 +82,50 @@ app.post('/api/todos', (req, res) => {
 app.put('/api/todos/:id', (req, res) => {
   const { project_code, task_type, description, status } = req.body;
   const { id } = req.params;
-  db.run(
-    'UPDATE todos SET project_code=?, task_type=?, description=?, status=? WHERE id=?',
-    [project_code, task_type, description, status, id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      db.get('SELECT * FROM todos WHERE id = ?', [id], (err, todo) => {
+  // 先查詢原本狀態
+  db.get('SELECT * FROM todos WHERE id = ?', [id], (err, oldTodo) => {
+    if (err || !oldTodo) return res.status(404).json({ error: 'Todo not found' });
+    db.run(
+      'UPDATE todos SET project_code=?, task_type=?, description=?, status=? WHERE id=?',
+      [project_code, task_type, description, status, id],
+      function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(todo);
-      });
-    }
-  );
+        // 狀態切換邏輯
+        if (oldTodo.status !== status) {
+          const now = new Date().toISOString();
+          if (status === 'in_progress' && oldTodo.status !== 'in_progress') {
+            // 進入 in_progress，新增一筆 start_time
+            console.log(`[work_sessions] 新增 start_time: todo_id=${id}, time=${now}`);
+            db.run(
+              'INSERT INTO work_sessions (todo_id, start_time) VALUES (?, ?)',
+              [id, now]
+            );
+          } else if (oldTodo.status === 'in_progress' && status !== 'in_progress') {
+            // 離開 in_progress，補上 end_time
+            db.get(
+              'SELECT * FROM work_sessions WHERE todo_id = ? AND end_time IS NULL ORDER BY start_time DESC LIMIT 1',
+              [id],
+              (err, session) => {
+                if (session) {
+                  console.log(`[work_sessions] 補上 end_time: session_id=${session.id}, time=${now}`);
+                  db.run(
+                    'UPDATE work_sessions SET end_time = ? WHERE id = ?',
+                    [now, session.id]
+                  );
+                } else {
+                  console.log(`[work_sessions] 找不到未結束的 session 來補 end_time, todo_id=${id}`);
+                }
+              }
+            );
+          }
+        }
+        db.get('SELECT * FROM todos WHERE id = ?', [id], (err, todo) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json(todo);
+        });
+      }
+    );
+  });
 });
 
 // 刪除待辦事項
