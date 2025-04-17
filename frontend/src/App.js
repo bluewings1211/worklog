@@ -23,6 +23,12 @@ function App() {
   const [summaryJson, setSummaryJson] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
   const summaryRef = useRef();
+  const [projectCodes, setProjectCodes] = useState([]);
+  const [taskTypes, setTaskTypes] = useState([]);
+  const [showProjectCodeMgr, setShowProjectCodeMgr] = useState(false);
+  const [showTaskTypeMgr, setShowTaskTypeMgr] = useState(false);
+  const [newProjectCode, setNewProjectCode] = useState('');
+  const [newTaskType, setNewTaskType] = useState('');
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -39,6 +45,12 @@ function App() {
 
   useEffect(() => {
     fetchTodos();
+  }, []);
+
+  // 取得選單資料
+  useEffect(() => {
+    fetch('/api/project_codes').then(r => r.json()).then(setProjectCodes);
+    fetch('/api/task_types').then(r => r.json()).then(setTaskTypes);
   }, []);
 
   // 新增待辦事項
@@ -129,17 +141,58 @@ function App() {
     }
   };
 
+  // 新增專案代碼
+  const handleAddProjectCode = async () => {
+    if (!newProjectCode.trim()) return;
+    await fetch('/api/project_codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: newProjectCode.trim() })
+    });
+    setNewProjectCode('');
+    fetch('/api/project_codes').then(r => r.json()).then(setProjectCodes);
+  };
+  // 刪除專案代碼
+  const handleDeleteProjectCode = async (code) => {
+    await fetch(`/api/project_codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+    fetch('/api/project_codes').then(r => r.json()).then(setProjectCodes);
+  };
+  // 新增任務類型
+  const handleAddTaskType = async () => {
+    if (!newTaskType.trim()) return;
+    await fetch('/api/task_types', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: newTaskType.trim() })
+    });
+    setNewTaskType('');
+    fetch('/api/task_types').then(r => r.json()).then(setTaskTypes);
+  };
+  // 刪除任務類型
+  const handleDeleteTaskType = async (type) => {
+    await fetch(`/api/task_types/${encodeURIComponent(type)}`, { method: 'DELETE' });
+    fetch('/api/task_types').then(r => r.json()).then(setTaskTypes);
+  };
+
   return (
     <div className="App">
       <h1>工作待辦清單</h1>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+        <button onClick={() => setShowProjectCodeMgr(true)}>專案代碼管理</button>
+        <button onClick={() => setShowTaskTypeMgr(true)}>任務類型管理</button>
+      </div>
       <form onSubmit={handleAdd} style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input
-          placeholder="專案代碼"
+        <select
           value={form.project_code}
           onChange={e => setForm(f => ({ ...f, project_code: e.target.value }))}
           required
-          style={{ width: 120 }}
-        />
+          style={{ width: 160 }}
+        >
+          <option value="">選擇專案代碼</option>
+          {projectCodes.map(code => (
+            <option key={code} value={code}>{code}</option>
+          ))}
+        </select>
         <select
           value={form.task_type}
           onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}
@@ -147,22 +200,9 @@ function App() {
           style={{ width: 180 }}
         >
           <option value="">選擇任務類型</option>
-          <option>Implement</option>
-          <option>Meeting</option>
-          <option>Test</option>
-          <option>Survey</option>
-          <option>Bug Fix</option>
-          <option>Support</option>
-          <option>Trouble Shooting</option>
-          <option>Take Leave</option>
-          <option>Document</option>
-          <option>Operation</option>
-          <option>Design</option>
-          <option>Misc</option>
-          <option>Training</option>
-          <option>Project Management</option>
-          <option>Manager Task</option>
-          <option>POC</option>
+          {taskTypes.map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
         </select>
         <input
           placeholder="描述"
@@ -229,6 +269,52 @@ function App() {
             <div style={{ textAlign: 'right', marginTop: 8 }}>
               <button onClick={() => setShowSummary(false)}>關閉</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* 專案代碼管理視窗 */}
+      {showProjectCodeMgr && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowProjectCodeMgr(false)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 320, maxWidth: 400, boxShadow: '0 2px 16px #0002', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>專案代碼管理</b>
+              <button onClick={() => setShowProjectCodeMgr(false)}>關閉</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={newProjectCode} onChange={e => setNewProjectCode(e.target.value)} placeholder="新增專案代碼" style={{ flex: 1 }} />
+              <button onClick={handleAddProjectCode}>新增</button>
+            </div>
+            <ul style={{ maxHeight: 200, overflowY: 'auto', padding: 0, margin: 0 }}>
+              {projectCodes.map(code => (
+                <li key={code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #eee', padding: '4px 0' }}>
+                  <span>{code}</span>
+                  <button style={{ color: 'white', background: '#e74c3c', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }} onClick={() => handleDeleteProjectCode(code)}>刪除</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      {/* 任務類型管理視窗 */}
+      {showTaskTypeMgr && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTaskTypeMgr(false)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 320, maxWidth: 400, boxShadow: '0 2px 16px #0002', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>任務類型管理</b>
+              <button onClick={() => setShowTaskTypeMgr(false)}>關閉</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={newTaskType} onChange={e => setNewTaskType(e.target.value)} placeholder="新增任務類型" style={{ flex: 1 }} />
+              <button onClick={handleAddTaskType}>新增</button>
+            </div>
+            <ul style={{ maxHeight: 200, overflowY: 'auto', padding: 0, margin: 0 }}>
+              {taskTypes.map(type => (
+                <li key={type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #eee', padding: '4px 0' }}>
+                  <span>{type}</span>
+                  <button style={{ color: 'white', background: '#e74c3c', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }} onClick={() => handleDeleteTaskType(type)}>刪除</button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

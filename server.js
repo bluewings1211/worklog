@@ -33,6 +33,31 @@ function initDb() {
       end_time TEXT,
       FOREIGN KEY(todo_id) REFERENCES todos(id)
     )`);
+    db.run(`CREATE TABLE IF NOT EXISTS project_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS task_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL UNIQUE
+    )`);
+    // 預設資料（如無資料時）
+    db.get('SELECT COUNT(*) as cnt FROM project_codes', (err, row) => {
+      if (row && row.cnt === 0) {
+        ['SuperCloud Composer', 'ProjectX', 'DemoProject'].forEach(code => {
+          db.run('INSERT INTO project_codes (code) VALUES (?)', [code]);
+        });
+      }
+    });
+    db.get('SELECT COUNT(*) as cnt FROM task_types', (err, row) => {
+      if (row && row.cnt === 0) {
+        [
+          'Implement','Meeting','Test','Survey','Bug Fix','Support','Trouble Shooting','Take Leave','Document','Operation','Design','Misc','Training','Project Management','Manager Task','POC'
+        ].forEach(type => {
+          db.run('INSERT INTO task_types (type) VALUES (?)', [type]);
+        });
+      }
+    });
   });
 }
 
@@ -188,6 +213,60 @@ app.put('/api/sessions/:session_id', (req, res) => {
       });
     }
   );
+});
+
+// 取得所有 project_codes
+app.get('/api/project_codes', (req, res) => {
+  db.all('SELECT code FROM project_codes ORDER BY code ASC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows.map(r => r.code));
+  });
+});
+
+// 新增專案代碼
+app.post('/api/project_codes', (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'code is required' });
+  db.run('INSERT INTO project_codes (code) VALUES (?)', [code], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// 刪除專案代碼
+app.delete('/api/project_codes/:code', (req, res) => {
+  const { code } = req.params;
+  db.run('DELETE FROM project_codes WHERE code = ?', [code], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// 取得所有 task_types
+app.get('/api/task_types', (req, res) => {
+  db.all('SELECT type FROM task_types ORDER BY type ASC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows.map(r => r.type));
+  });
+});
+
+// 新增任務類型
+app.post('/api/task_types', (req, res) => {
+  const { type } = req.body;
+  if (!type) return res.status(400).json({ error: 'type is required' });
+  db.run('INSERT INTO task_types (type) VALUES (?)', [type], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// 刪除任務類型
+app.delete('/api/task_types/:type', (req, res) => {
+  const { type } = req.params;
+  db.run('DELETE FROM task_types WHERE type = ?', [type], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
 });
 
 // 結算本日工時
