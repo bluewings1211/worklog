@@ -269,15 +269,19 @@ app.delete('/api/task_types/:type', (req, res) => {
   });
 });
 
-// 結算本日工時
+// 結算本日工時（可指定日期）
 app.get('/api/summary/today', (req, res) => {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
-
-  // 查詢今日所有 work_sessions，並 join todos
+  let dateStr;
+  if (req.query.date) {
+    dateStr = req.query.date;
+  } else {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    dateStr = `${yyyy}-${mm}-${dd}`;
+  }
+  // 查詢指定日期所有 work_sessions，並 join todos
   db.all(
     `SELECT ws.*, t.project_code, t.task_type, t.item_no, t.description
      FROM work_sessions ws

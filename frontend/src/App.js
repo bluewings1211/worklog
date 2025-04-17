@@ -4,6 +4,8 @@ import './App.css';
 import { DndContext, closestCenter, useDroppable } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDraggable } from '@dnd-kit/core';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 
 const STATUS = [
   { key: 'pending', label: '未完成' },
@@ -12,6 +14,7 @@ const STATUS = [
   { key: 'archive', label: 'Archive' },
 ];
 const DELETE_KEY = 'delete';
+const EDIT_KEY = 'edit';
 
 function App() {
   const [todos, setTodos] = useState([]);
@@ -29,6 +32,11 @@ function App() {
   const [showTaskTypeMgr, setShowTaskTypeMgr] = useState(false);
   const [newProjectCode, setNewProjectCode] = useState('');
   const [newTaskType, setNewTaskType] = useState('');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [calendarLogs, setCalendarLogs] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [editTodo, setEditTodo] = useState(null); // { ...todo } or null
+  const [editDesc, setEditDesc] = useState('');
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -96,8 +104,16 @@ function App() {
     const todoId = active.id;
     const newStatus = over.id;
     if (newStatus === DELETE_KEY) {
-      // 拖曳到 Delete 佇列即刪除
       await handleDelete(todoId);
+      return;
+    }
+    // 支援 edit 佇列 id 格式為 edit_狀態key
+    if (newStatus.startsWith(EDIT_KEY)) {
+      const todo = todos.find(t => t.id === todoId);
+      if (todo) {
+        setEditTodo(todo);
+        setEditDesc(todo.description);
+      }
       return;
     }
     if (!STATUS.some(s => s.key === newStatus)) return;
@@ -174,12 +190,82 @@ function App() {
     fetch('/api/task_types').then(r => r.json()).then(setTaskTypes);
   };
 
+  // 取得特定日期的 worklog
+  const fetchWorklogByDate = async (date) => {
+    setCalendarLoading(true);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    try {
+      const res = await fetch(`/api/summary/today?date=${dateStr}`);
+      const data = await res.json();
+      setCalendarLogs(data);
+    } catch (e) {
+      setCalendarLogs([]);
+    }
+    setCalendarLoading(false);
+  };
+
+  // 日曆日期變更時觸發
+  useEffect(() => {
+    fetchWorklogByDate(calendarDate);
+  }, [calendarDate]);
+
+  // 編輯彈窗的更新
+  const handleEditSave = async () => {
+    if (editTodo) {
+      await fetch(`/api/todos/${editTodo.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_code: editTodo.project_code,
+          task_type: editTodo.task_type,
+          description: editDesc,
+          status: editTodo.status
+        })
+      });
+      setEditTodo(null);
+      fetchTodos();
+    }
+  };
+
   return (
     <div className="App">
       <h1>工作待辦清單</h1>
+      {/* 日曆 UI */}
+      <div style={{ margin: '32px 0 16px 0', display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+        <div>
+          <Calendar
+            onChange={setCalendarDate}
+            value={calendarDate}
+            locale="zh-TW"
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 320 }}>
+          <h3 style={{ margin: 0 }}> {calendarDate.toLocaleDateString()} 的工時紀錄</h3>
+          {calendarLoading ? (
+            <div>載入中...</div>
+          ) : calendarLogs.length === 0 ? (
+            <div style={{ color: '#aaa' }}>無資料</div>
+          ) : (
+            <ul style={{ padding: 0, margin: 0 }}>
+              {calendarLogs.map((log, idx) => (
+                <li key={idx} style={{ borderBottom: '1px solid #eee', marginBottom: 8, paddingBottom: 8 }}>
+                  <div><b>{log.project_code}</b> [{log.task_type}],工時: {log.hour_spent} 小時, 描述: {log.description}  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      {/* 管理按鈕列 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
         <button onClick={() => setShowProjectCodeMgr(true)}>專案代碼管理</button>
         <button onClick={() => setShowTaskTypeMgr(true)}>任務類型管理</button>
+        <button onClick={handleSummary} disabled={summaryLoading}>
+          {summaryLoading ? '結算中...' : '結算本日工時'}
+        </button>
       </div>
       <form onSubmit={handleAdd} style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
         <select
@@ -220,16 +306,32 @@ function App() {
           {/* 狀態佇列 */}
           <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
             {STATUS.map(s => (
-              <DroppableColumn key={s.key} id={s.key} label={s.label}>
-                <SortableContext items={todos.filter(t => t.status === s.key).map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  {todos.filter(t => t.status === s.key).length === 0 && (
-                    <div style={{ color: '#aaa', textAlign: 'center', marginTop: 32 }}>無資料</div>
-                  )}
-                  {todos.filter(t => t.status === s.key).map(todo => (
-                    <DraggableTodo key={todo.id} todo={todo} />
-                  ))}
-                </SortableContext>
-              </DroppableColumn>
+              <div key={s.key} style={{ flex: 1 }}>
+                {/* Edit 佇列 */}
+                <DroppableEditColumn id={EDIT_KEY + '_' + s.key} label="Edit" statusKey={s.key} onEditDrop={todo => { setEditTodo(todo); setEditDesc(todo.description); }} />
+                <DroppableColumn id={s.key} label={s.label}>
+                  <SortableContext items={todos.filter(t => t.status === s.key).map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    {todos.filter(t => t.status === s.key).length === 0 && (
+                      <div style={{ color: '#aaa', textAlign: 'center', marginTop: 32 }}>無資料</div>
+                    )}
+                    {todos.filter(t => t.status === s.key).map(todo => (
+                      <DraggableTodo key={todo.id} todo={todo} onUpdate={async (newTodo) => {
+                        await fetch(`/api/todos/${todo.id}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            project_code: newTodo.project_code,
+                            task_type: newTodo.task_type,
+                            description: newTodo.description,
+                            status: newTodo.status
+                          })
+                        });
+                        fetchTodos();
+                      }} />
+                    ))}
+                  </SortableContext>
+                </DroppableColumn>
+              </div>
             ))}
           </div>
           {/* Delete 佇列獨立一列，置中顯示 */}
@@ -238,11 +340,6 @@ function App() {
           </div>
         </DndContext>
       )}
-      <div style={{ margin: '24px 0' }}>
-        <button onClick={handleSummary} disabled={summaryLoading}>
-          {summaryLoading ? '結算中...' : '結算本日工時'}
-        </button>
-      </div>
       {showSummary && (
         <div style={{
           position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh',
@@ -318,6 +415,24 @@ function App() {
           </div>
         </div>
       )}
+      {/* 編輯彈窗 */}
+      {editTodo && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEditTodo(null)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 320, maxWidth: 400, boxShadow: '0 2px 16px #0002', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>編輯卡片描述</b>
+              <button onClick={() => setEditTodo(null)}>關閉</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{editTodo.project_code} [{editTodo.task_type}]</div>
+              <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} style={{ width: '100%', minHeight: 80, fontSize: 15, border: '1px solid #ccc', borderRadius: 4, padding: 8 }} />
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <button onClick={handleEditSave}>儲存</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -370,9 +485,63 @@ function DroppableDeleteColumn({ id, label }) {
   );
 }
 
+// 新增 Edit 佇列元件
+function DroppableEditColumn({ id, label }) {
+  const { setNodeRef, isOver, active } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        border: '2px dashed #2980b9',
+        borderRadius: 8,
+        padding: 8,
+        minHeight: 36,
+        background: isOver ? '#d6eaff' : '#ecf6fb',
+        color: '#2980b9',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 'bold',
+        fontSize: 16,
+        marginBottom: 4,
+        transition: 'background 0.2s',
+      }}
+    >
+      ✏️ {label}
+    </div>
+  );
+}
+
 // 單一卡片的拖曳元件
-function DraggableTodo({ todo }) {
+function DraggableTodo({ todo, onUpdate }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: todo.id });
+  const [editing, setEditing] = useState(false);
+  const [editDesc, setEditDesc] = useState(todo.description);
+  const inputRef = useRef();
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editing]);
+
+  const handleEdit = () => {
+    setEditDesc(todo.description);
+    setEditing(true);
+  };
+
+  const handleEditKeyDown = async (e) => {
+    if (e.key === 'Enter') {
+      setEditing(false);
+      if (editDesc !== todo.description) {
+        await onUpdate({ ...todo, description: editDesc });
+      }
+    } else if (e.key === 'Escape') {
+      setEditing(false);
+      setEditDesc(todo.description);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -389,8 +558,28 @@ function DraggableTodo({ todo }) {
         cursor: 'grab',
       }}
     >
-      <div style={{ fontWeight: 'bold', fontSize: 15 }}>{todo.project_code} <span style={{ fontWeight: 'normal', color: '#888' }}>[{todo.task_type}]</span></div>
-      <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>{todo.description}</div>
+      <div style={{ display: 'flex', alignItems: 'center', fontWeight: 'bold', fontSize: 15 }}>
+        {todo.project_code} <span style={{ fontWeight: 'normal', color: '#888', marginLeft: 4 }}>[{todo.task_type}]</span>
+        <button
+          onClick={e => { e.stopPropagation(); handleEdit(); }}
+          style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}
+          title="編輯描述"
+        >
+          ✏️
+        </button>
+      </div>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={editDesc}
+          onChange={e => setEditDesc(e.target.value)}
+          onKeyDown={handleEditKeyDown}
+          onClick={e => e.stopPropagation()}
+          style={{ width: '100%', fontSize: 13, margin: '4px 0', border: '1px solid #aaa', borderRadius: 4, padding: 4 }}
+        />
+      ) : (
+        <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>{todo.description}</div>
+      )}
     </div>
   );
 }
