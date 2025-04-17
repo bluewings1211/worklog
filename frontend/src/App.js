@@ -37,6 +37,8 @@ function App() {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [editTodo, setEditTodo] = useState(null); // { ...todo } or null
   const [editDesc, setEditDesc] = useState('');
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newCardStatus, setNewCardStatus] = useState('pending');
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -103,17 +105,22 @@ function App() {
     if (!over || !active) return;
     const todoId = active.id;
     const newStatus = over.id;
-    if (newStatus === DELETE_KEY) {
+    if (newStatus.startsWith(DELETE_KEY)) {
       await handleDelete(todoId);
       return;
     }
-    // 支援 edit 佇列 id 格式為 edit_狀態key
     if (newStatus.startsWith(EDIT_KEY)) {
       const todo = todos.find(t => t.id === todoId);
       if (todo) {
         setEditTodo(todo);
         setEditDesc(todo.description);
       }
+      return;
+    }
+    if (newStatus.startsWith('new_')) {
+      const statusKey = newStatus.replace('new_', '');
+      setNewCardStatus(statusKey);
+      setShowNewModal(true);
       return;
     }
     if (!STATUS.some(s => s.key === newStatus)) return;
@@ -307,8 +314,11 @@ function App() {
           <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
             {STATUS.map(s => (
               <div key={s.key} style={{ flex: 1 }}>
-                {/* Edit 佇列 */}
-                <DroppableEditColumn id={EDIT_KEY + '_' + s.key} label="Edit" statusKey={s.key} onEditDrop={todo => { setEditTodo(todo); setEditDesc(todo.description); }} />
+                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                  <DroppableNewColumn id={'new_' + s.key} label="New" statusKey={s.key} />
+                  <DroppableEditColumn id={EDIT_KEY + '_' + s.key} label="Edit" statusKey={s.key} onEditDrop={todo => { setEditTodo(todo); setEditDesc(todo.description); }} />
+                  <DroppableDeleteColumn id={DELETE_KEY + '_' + s.key} label="Delete" />
+                </div>
                 <DroppableColumn id={s.key} label={s.label}>
                   <SortableContext items={todos.filter(t => t.status === s.key).map(t => t.id)} strategy={verticalListSortingStrategy}>
                     {todos.filter(t => t.status === s.key).length === 0 && (
@@ -333,10 +343,6 @@ function App() {
                 </DroppableColumn>
               </div>
             ))}
-          </div>
-          {/* Delete 佇列獨立一列，置中顯示 */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
-            <DroppableDeleteColumn id={DELETE_KEY} label="Delete" />
           </div>
         </DndContext>
       )}
@@ -433,6 +439,67 @@ function App() {
           </div>
         </div>
       )}
+      {/* 新增卡片彈窗 */}
+      {showNewModal && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowNewModal(false)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 320, maxWidth: 400, boxShadow: '0 2px 16px #0002', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>新增卡片</b>
+              <button onClick={() => setShowNewModal(false)}>關閉</button>
+            </div>
+            <form onSubmit={async e => {
+              e.preventDefault();
+              if (!form.project_code || !form.task_type) return;
+              await fetch('/api/todos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...form, status: newCardStatus })
+              });
+              setForm({ project_code: '', task_type: '', description: '' });
+              setShowNewModal(false);
+              fetchTodos();
+            }}>
+              <div style={{ marginBottom: 8 }}>
+                <select
+                  value={form.project_code}
+                  onChange={e => setForm(f => ({ ...f, project_code: e.target.value }))}
+                  required
+                  style={{ width: '100%' }}
+                >
+                  <option value="">選擇專案代碼</option>
+                  {projectCodes.map(code => (
+                    <option key={code} value={code}>{code}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <select
+                  value={form.task_type}
+                  onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}
+                  required
+                  style={{ width: '100%' }}
+                >
+                  <option value="">選擇任務類型</option>
+                  {taskTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <input
+                  placeholder="描述"
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <button type="submit">新增</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -465,22 +532,22 @@ function DroppableDeleteColumn({ id, label }) {
     <div
       ref={setNodeRef}
       style={{
-        flex: 0.7,
-        border: '2px solid #c0392b',
+        border: '2px dashed #c0392b',
         borderRadius: 8,
         padding: 8,
-        minHeight: 200,
-        background: isOver ? '#ff7675' : '#e74c3c',
-        color: 'white',
+        minHeight: 36,
+        background: isOver ? '#ff7675' : '#fbeaea',
+        color: '#c0392b',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontWeight: 'bold',
-        fontSize: 20,
+        fontSize: 16,
+        marginBottom: 4,
         transition: 'background 0.2s',
       }}
     >
-      {label}
+      🗑️ {label}
     </div>
   );
 }
@@ -512,35 +579,36 @@ function DroppableEditColumn({ id, label }) {
   );
 }
 
+// 新增 New 佇列元件
+function DroppableNewColumn({ id, label, statusKey, onNewDrop }) {
+  const { setNodeRef, isOver, active } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        border: '2px dashed #27ae60',
+        borderRadius: 8,
+        padding: 8,
+        minHeight: 36,
+        background: isOver ? '#b8f7c2' : '#eafbf0',
+        color: '#27ae60',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 'bold',
+        fontSize: 16,
+        marginBottom: 4,
+        transition: 'background 0.2s',
+      }}
+    >
+      ➕ {label}
+    </div>
+  );
+}
+
 // 單一卡片的拖曳元件
-function DraggableTodo({ todo, onUpdate }) {
+function DraggableTodo({ todo }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: todo.id });
-  const [editing, setEditing] = useState(false);
-  const [editDesc, setEditDesc] = useState(todo.description);
-  const inputRef = useRef();
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [editing]);
-
-  const handleEdit = () => {
-    setEditDesc(todo.description);
-    setEditing(true);
-  };
-
-  const handleEditKeyDown = async (e) => {
-    if (e.key === 'Enter') {
-      setEditing(false);
-      if (editDesc !== todo.description) {
-        await onUpdate({ ...todo, description: editDesc });
-      }
-    } else if (e.key === 'Escape') {
-      setEditing(false);
-      setEditDesc(todo.description);
-    }
-  };
 
   return (
     <div
@@ -560,26 +628,8 @@ function DraggableTodo({ todo, onUpdate }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', fontWeight: 'bold', fontSize: 15 }}>
         {todo.project_code} <span style={{ fontWeight: 'normal', color: '#888', marginLeft: 4 }}>[{todo.task_type}]</span>
-        <button
-          onClick={e => { e.stopPropagation(); handleEdit(); }}
-          style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}
-          title="編輯描述"
-        >
-          ✏️
-        </button>
       </div>
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={editDesc}
-          onChange={e => setEditDesc(e.target.value)}
-          onKeyDown={handleEditKeyDown}
-          onClick={e => e.stopPropagation()}
-          style={{ width: '100%', fontSize: 13, margin: '4px 0', border: '1px solid #aaa', borderRadius: 4, padding: 4 }}
-        />
-      ) : (
-        <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>{todo.description}</div>
-      )}
+      <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>{todo.description}</div>
     </div>
   );
 }
