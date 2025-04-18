@@ -1,6 +1,6 @@
 # Worklog 工時管理系統
 
-這是一個簡易的工時與任務管理系統，支援多專案、多任務類型、工時結算、拖曳排序等功能。前端採用 React，後端為 Node.js + Express + SQLite，並支援 Docker 一鍵部署。
+這是一個簡易的工時與任務管理系統，支援多專案、多任務類型、工時結算、拖曳排序、常用連結管理等功能。前端採用 React，後端為 Node.js + Express + SQLite，並支援 Docker 一鍵部署。
 
 ## 主要功能
 
@@ -13,6 +13,8 @@
 - 一鍵結算本日工時，並可複製 JSON
 - 支援工時資料的即時同步與樂觀 UI 更新
 - 支援 Docker 化部署
+- 常用連結管理（可自訂名稱、URL、備註，並於主畫面快速存取）
+- 每個任務卡片皆有 license_keys 欄位（預設為 []，未來可擴充授權管理）
 
 ## 專案結構
 
@@ -67,7 +69,24 @@ npm start
 - `PUT /api/todos/:id`：更新任務
 - `PATCH /api/todos/order`：批次更新任務順序
 - `DELETE /api/todos/:id`：刪除任務
+- `GET/POST/DELETE /api/links`：常用連結管理
 - 其他：`/api/project_codes`, `/api/task_types`, `/api/summary/today` 等
+
+## worklog JSON 結構
+
+結算工時時，每筆紀錄會包含 license_keys 欄位：
+
+```json
+{
+  "project_code": "...",
+  "task_type": "...",
+  "item_no": 1,
+  "date": "2025-04-18",
+  "description": "...",
+  "hour_spent": 2.5,
+  "license_keys": []
+}
+```
 
 ## 其他說明
 

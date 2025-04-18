@@ -39,6 +39,10 @@ function App() {
   const [editDesc, setEditDesc] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
   const [newCardStatus, setNewCardStatus] = useState('pending');
+  const [showLinksMgr, setShowLinksMgr] = useState(false);
+  const [links, setLinks] = useState([]);
+  const [newLink, setNewLink] = useState({ name: '', url: '', note: '' });
+  const [linksLoading, setLinksLoading] = useState(false);
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -237,6 +241,40 @@ function App() {
     }
   };
 
+  // 取得所有常用連結
+  const fetchLinks = async () => {
+    setLinksLoading(true);
+    try {
+      const res = await fetch('/api/links');
+      const data = await res.json();
+      setLinks(data);
+    } catch (e) {
+      // ignore
+    }
+    setLinksLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLinks();
+  }, []);
+
+  // 新增常用連結
+  const handleAddLink = async () => {
+    if (!newLink.name.trim() || !newLink.url.trim()) return;
+    await fetch('/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newLink)
+    });
+    setNewLink({ name: '', url: '', note: '' });
+    fetchLinks();
+  };
+  // 刪除常用連結
+  const handleDeleteLink = async (id) => {
+    await fetch(`/api/links/${id}`, { method: 'DELETE' });
+    fetchLinks();
+  };
+
   return (
     <div className="App">
       <h1>工作待辦清單</h1>
@@ -283,11 +321,39 @@ function App() {
       {/* 管理按鈕列 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
         <button onClick={() => setShowProjectCodeMgr(true)}>專案代碼管理</button>
+        <button onClick={() => setShowLinksMgr(true)}>常用連結管理</button>
         <button onClick={() => setShowTaskTypeMgr(true)}>任務類型管理</button>
         <button onClick={handleSummary} disabled={summaryLoading}>
           {summaryLoading ? '結算中...' : '結算本日工時'}
         </button>
       </div>
+      {/* 常用連結按鈕列（顯示在專案代碼管理下方） */}
+      {links.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, margin: '0 0 16px 0', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+          {links.map(link => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={link.note || link.url}
+              style={{
+                display: 'inline-block',
+                padding: '6px 16px',
+                background: '#f5f5f5',
+                border: '1px solid #bbb',
+                borderRadius: 6,
+                color: '#2980b9',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                marginBottom: 4
+              }}
+            >
+              {link.name}
+            </a>
+          ))}
+        </div>
+      )}
       {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
       {loading ? (
         <div>載入中...</div>
@@ -433,6 +499,33 @@ function App() {
                 <li key={type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #eee', padding: '4px 0' }}>
                   <span>{type}</span>
                   <button style={{ color: 'white', background: '#e74c3c', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }} onClick={() => handleDeleteTaskType(type)}>刪除</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      {/* 常用連結管理彈窗 */}
+      {showLinksMgr && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowLinksMgr(false)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 8, minWidth: 340, maxWidth: 420, boxShadow: '0 2px 16px #0002', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b>常用連結管理</b>
+              <button onClick={() => setShowLinksMgr(false)}>關閉</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={newLink.name} onChange={e => setNewLink(l => ({ ...l, name: e.target.value }))} placeholder="名稱" style={{ width: 100 }} />
+              <input value={newLink.url} onChange={e => setNewLink(l => ({ ...l, url: e.target.value }))} placeholder="URL" style={{ flex: 1 }} />
+              <input value={newLink.note} onChange={e => setNewLink(l => ({ ...l, note: e.target.value }))} placeholder="備註" style={{ width: 100 }} />
+              <button onClick={handleAddLink}>新增</button>
+            </div>
+            <ul style={{ maxHeight: 220, overflowY: 'auto', padding: 0, margin: 0 }}>
+              {links.map(link => (
+                <li key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #eee', padding: '4px 0' }}>
+                  <span style={{ fontWeight: 'bold', color: '#2980b9' }}>{link.name}</span>
+                  <span style={{ color: '#888', fontSize: 13, marginLeft: 8, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.url}</span>
+                  {link.note && <span style={{ color: '#aaa', fontSize: 12, marginLeft: 8 }}>{link.note}</span>}
+                  <button style={{ color: 'white', background: '#e74c3c', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 12, cursor: 'pointer', marginLeft: 8 }} onClick={() => handleDeleteLink(link.id)}>刪除</button>
                 </li>
               ))}
             </ul>

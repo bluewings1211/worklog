@@ -24,7 +24,8 @@ function initDb() {
       description TEXT,
       status TEXT NOT NULL,
       item_no INTEGER UNIQUE NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      license_keys TEXT DEFAULT '[]'
     )`);
     db.run(`CREATE TABLE IF NOT EXISTS work_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +41,12 @@ function initDb() {
     db.run(`CREATE TABLE IF NOT EXISTS task_types (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL UNIQUE
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      note TEXT
     )`);
     // 預設資料（如無資料時）
     db.get('SELECT COUNT(*) as cnt FROM project_codes', (err, row) => {
@@ -75,6 +82,8 @@ app.use((req, res, next) => {
 app.get('/api/todos', (req, res) => {
   db.all('SELECT * FROM todos ORDER BY item_no ASC', [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
+    // license_keys 欄位轉回 array
+    rows.forEach(row => { row.license_keys = JSON.parse(row.license_keys || '[]'); });
     res.json(rows);
   });
 });
@@ -90,14 +99,30 @@ app.post('/api/todos', (req, res) => {
     const nextNo = (row?.maxNo || 0) + 1;
     const todoStatus = status || 'pending';
     db.run(
-      'INSERT INTO todos (project_code, task_type, description, status, item_no) VALUES (?, ?, ?, ?, ?)',
-      [project_code, task_type, description || '', todoStatus, nextNo],
+      'INSERT INTO todos (project_code, task_type, description, status, item_no, license_keys) VALUES (?, ?, ?, ?, ?, ?)',
+      [project_code, task_type, description || '', todoStatus, nextNo, '[]'],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        db.get('SELECT * FROM todos WHERE id = ?', [this.lastID], (err, todo) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.status(201).json(todo);
-        });
+        const todoId = this.lastID;
+        // 若 status 為 in_progress，立即建立一筆 work_session
+        if (todoStatus === 'in_progress') {
+          const now = new Date().toISOString();
+          db.run('INSERT INTO work_sessions (todo_id, start_time) VALUES (?, ?)', [todoId, now], (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            db.get('SELECT * FROM todos WHERE id = ?', [todoId], (err, todo) => {
+              if (err) return res.status(500).json({ error: err.message });
+              // license_keys 欄位轉回 array
+              todo.license_keys = JSON.parse(todo.license_keys || '[]');
+              res.status(201).json(todo);
+            });
+          });
+        } else {
+          db.get('SELECT * FROM todos WHERE id = ?', [todoId], (err, todo) => {
+            if (err) return res.status(500).json({ error: err.message });
+            todo.license_keys = JSON.parse(todo.license_keys || '[]');
+            res.status(201).json(todo);
+          });
+        }
       }
     );
   });
@@ -105,14 +130,14 @@ app.post('/api/todos', (req, res) => {
 
 // 更新待辦事項
 app.put('/api/todos/:id', (req, res) => {
-  const { project_code, task_type, description, status } = req.body;
+  const { project_code, task_type, description, status, license_keys } = req.body;
   const { id } = req.params;
   // 先查詢原本狀態
   db.get('SELECT * FROM todos WHERE id = ?', [id], (err, oldTodo) => {
     if (err || !oldTodo) return res.status(404).json({ error: 'Todo not found' });
     db.run(
-      'UPDATE todos SET project_code=?, task_type=?, description=?, status=? WHERE id=?',
-      [project_code, task_type, description, status, id],
+      'UPDATE todos SET project_code=?, task_type=?, description=?, status=?, license_keys=? WHERE id=?',
+      [project_code, task_type, description, status, JSON.stringify(license_keys || []), id],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
         // 狀態切換邏輯
@@ -146,6 +171,7 @@ app.put('/api/todos/:id', (req, res) => {
         }
         db.get('SELECT * FROM todos WHERE id = ?', [id], (err, todo) => {
           if (err) return res.status(500).json({ error: err.message });
+          todo.license_keys = JSON.parse(todo.license_keys || '[]');
           res.json(todo);
         });
       }
@@ -206,7 +232,7 @@ app.put('/api/sessions/:session_id', (req, res) => {
     'UPDATE work_sessions SET start_time = ?, end_time = ? WHERE id = ?',
     [start_time, end_time, session_id],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status 500).json({ error: err.message });
       db.get('SELECT * FROM work_sessions WHERE id = ?', [session_id], (err, session) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(session);
@@ -283,7 +309,7 @@ app.get('/api/summary/today', (req, res) => {
   }
   // 查詢指定日期所有 work_sessions，並 join todos
   db.all(
-    `SELECT ws.*, t.project_code, t.task_type, t.item_no, t.description
+    `SELECT ws.*, t.project_code, t.task_type, t.item_no, t.description, t.license_keys
      FROM work_sessions ws
      JOIN todos t ON ws.todo_id = t.id
      WHERE date(ws.start_time) = ?`,
@@ -300,7 +326,8 @@ app.get('/api/summary/today', (req, res) => {
             item_no: row.item_no,
             date: dateStr,
             description: row.description,
-            hour_spent: 0
+            hour_spent: 0,
+            license_keys: JSON.parse(row.license_keys || '[]')
           };
         }
         if (row.start_time && row.end_time) {
@@ -320,6 +347,38 @@ app.get('/api/summary/today', (req, res) => {
       res.json(result);
     }
   );
+});
+
+// 取得所有常用連結
+app.get('/api/links', (req, res) => {
+  db.all('SELECT * FROM links ORDER BY id ASC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// 新增常用連結
+app.post('/api/links', (req, res) => {
+  const { name, url, note } = req.body;
+  if (!name || !url) {
+    return res.status(400).json({ error: 'name, url are required' });
+  }
+  db.run('INSERT INTO links (name, url, note) VALUES (?, ?, ?)', [name, url, note || ''], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    db.get('SELECT * FROM links WHERE id = ?', [this.lastID], (err, link) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json(link);
+    });
+  });
+});
+
+// 刪除常用連結
+app.delete('/api/links/:id', (req, res) => {
+  const { id } = req.params;
+  db.run('DELETE FROM links WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
 });
 
 // 靜態檔案服務（React build）與 SPA fallback，必須放在所有 API 路由之後
