@@ -322,6 +322,15 @@ app.get('/api/summary/today', (req, res) => {
   );
 });
 
+// 靜態檔案服務（React build）與 SPA fallback，必須放在所有 API 路由之後
+app.use(express.static(path.join(__dirname, 'frontend', 'build')));
+app.get('/{*any}', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API not found' });
+  }
+  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
