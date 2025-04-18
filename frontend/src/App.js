@@ -256,13 +256,27 @@ function App() {
           ) : calendarLogs.length === 0 ? (
             <div style={{ color: '#aaa' }}>無資料</div>
           ) : (
-            <ul style={{ padding: 0, margin: 0 }}>
-              {calendarLogs.map((log, idx) => (
-                <li key={idx} style={{ borderBottom: '1px solid #eee', marginBottom: 8, paddingBottom: 8 }}>
-                  <div><b>{log.project_code}</b> [{log.task_type}],工時: {log.hour_spent} 小時, 描述: {log.description}  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div 
+                style={{ 
+                  padding: '8px', 
+                  marginBottom: '8px', 
+                  backgroundColor: calendarLogs.reduce((sum, log) => sum + (log.hour_spent || 0), 0) >= 8 ? '#d4edda' : '#f8d7da',
+                  color: calendarLogs.reduce((sum, log) => sum + (log.hour_spent || 0), 0) >= 8 ? '#155724' : '#721c24',
+                  borderRadius: '4px',
+                  fontWeight: 'bold'
+                }}
+              >
+                總工時：{calendarLogs.reduce((sum, log) => sum + (log.hour_spent || 0), 0)} 小時
+              </div>
+              <ul style={{ padding: 0, margin: 0 }}>
+                {calendarLogs.map((log, idx) => (
+                  <li key={idx} style={{ borderBottom: '1px solid #eee', marginBottom: 8, paddingBottom: 8 }}>
+                    <div><b>{log.project_code}</b> [{log.task_type}],工時: {log.hour_spent} 小時, 描述: {log.description}  </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       </div>
@@ -274,37 +288,6 @@ function App() {
           {summaryLoading ? '結算中...' : '結算本日工時'}
         </button>
       </div>
-      <form onSubmit={handleAdd} style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <select
-          value={form.project_code}
-          onChange={e => setForm(f => ({ ...f, project_code: e.target.value }))}
-          required
-          style={{ width: 160 }}
-        >
-          <option value="">選擇專案代碼</option>
-          {projectCodes.map(code => (
-            <option key={code} value={code}>{code}</option>
-          ))}
-        </select>
-        <select
-          value={form.task_type}
-          onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}
-          required
-          style={{ width: 180 }}
-        >
-          <option value="">選擇任務類型</option>
-          {taskTypes.map(type => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
-        <input
-          placeholder="描述"
-          value={form.description}
-          onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-          style={{ width: 220 }}
-        />
-        <button type="submit">新增</button>
-      </form>
       {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
       {loading ? (
         <div>載入中...</div>
@@ -315,7 +298,13 @@ function App() {
             {STATUS.map(s => (
               <div key={s.key} style={{ flex: 1 }}>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                  <DroppableNewColumn id={'new_' + s.key} label="New" statusKey={s.key} />
+                  <NewCardButton 
+                    statusKey={s.key} 
+                    onClick={() => {
+                      setNewCardStatus(s.key);
+                      setShowNewModal(true);
+                    }} 
+                  />
                   <DroppableEditColumn id={EDIT_KEY + '_' + s.key} label="Edit" statusKey={s.key} onEditDrop={todo => { setEditTodo(todo); setEditDesc(todo.description); }} />
                   <DroppableDeleteColumn id={DELETE_KEY + '_' + s.key} label="Delete" />
                 </div>
@@ -363,6 +352,35 @@ function App() {
                 📋
               </button>
             </div>
+            {/* 新增總工時顯示 */}
+            {(() => {
+              let summaryData;
+              try {
+                summaryData = JSON.parse(summaryJson);
+              } catch {
+                summaryData = null;
+              }
+              // summaryData 可能是陣列或物件
+              let logs = Array.isArray(summaryData) ? summaryData : (summaryData && summaryData.logs ? summaryData.logs : []);
+              if (logs && logs.length > 0) {
+                const total = logs.reduce((sum, log) => sum + (log.hour_spent || 0), 0);
+                const bgColor = total >= 8 ? '#d4edda' : '#f8d7da';
+                const color = total >= 8 ? '#155724' : '#721c24';
+                return (
+                  <div style={{
+                    padding: '8px',
+                    marginBottom: '8px',
+                    backgroundColor: bgColor,
+                    color: color,
+                    borderRadius: '4px',
+                    fontWeight: 'bold'
+                  }}>
+                    總工時：{total} 小時
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <textarea
               ref={summaryRef}
               value={summaryJson}
@@ -486,11 +504,11 @@ function App() {
                 </select>
               </div>
               <div style={{ marginBottom: 8 }}>
-                <input
+                <textarea
                   placeholder="描述"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', minHeight: 80, fontSize: 15, border: '1px solid #ccc', borderRadius: 4, padding: 8 }}
                 />
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -579,18 +597,17 @@ function DroppableEditColumn({ id, label }) {
   );
 }
 
-// 新增 New 佇列元件
-function DroppableNewColumn({ id, label, statusKey, onNewDrop }) {
-  const { setNodeRef, isOver, active } = useDroppable({ id });
+// 新增卡片按鈕元件
+function NewCardButton({ statusKey, onClick }) {
   return (
-    <div
-      ref={setNodeRef}
+    <button
+      onClick={onClick}
       style={{
         border: '2px dashed #27ae60',
         borderRadius: 8,
         padding: 8,
         minHeight: 36,
-        background: isOver ? '#b8f7c2' : '#eafbf0',
+        background: '#eafbf0',
         color: '#27ae60',
         display: 'flex',
         alignItems: 'center',
@@ -598,17 +615,45 @@ function DroppableNewColumn({ id, label, statusKey, onNewDrop }) {
         fontWeight: 'bold',
         fontSize: 16,
         marginBottom: 4,
-        transition: 'background 0.2s',
+        cursor: 'pointer',
+        width: '100%',
       }}
     >
-      ➕ {label}
-    </div>
+      ➕ New
+    </button>
   );
 }
 
 // 單一卡片的拖曳元件
 function DraggableTodo({ todo }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: todo.id });
+
+  // 將文字中的 URL 轉換為超連結
+  const renderTextWithLinks = (text) => {
+    // URL 正則表達式
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    
+    if (!text) return text;
+    
+    const parts = text.split(urlRegex);
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()} // 防止點擊連結時觸發拖曳
+            style={{ color: '#2980b9', textDecoration: 'underline' }}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
 
   return (
     <div
@@ -629,7 +674,9 @@ function DraggableTodo({ todo }) {
       <div style={{ display: 'flex', alignItems: 'center', fontWeight: 'bold', fontSize: 15 }}>
         {todo.project_code} <span style={{ fontWeight: 'normal', color: '#888', marginLeft: 4 }}>[{todo.task_type}]</span>
       </div>
-      <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>{todo.description}</div>
+      <div style={{ fontSize: 13, color: '#444', margin: '4px 0' }}>
+        {renderTextWithLinks(todo.description)}
+      </div>
     </div>
   );
 }
