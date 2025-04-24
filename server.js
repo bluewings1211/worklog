@@ -65,6 +65,12 @@ function initDb() {
         });
       }
     });
+    // 確保 license_keys 欄位存在
+    db.all("PRAGMA table_info(todos)", [], (err, cols) => {
+      if (!err && Array.isArray(cols) && !cols.find(c => c.name === 'license_keys')) {
+        db.run("ALTER TABLE todos ADD COLUMN license_keys TEXT DEFAULT '[]'");
+      }
+    });
   });
 }
 
@@ -232,7 +238,7 @@ app.put('/api/sessions/:session_id', (req, res) => {
     'UPDATE work_sessions SET start_time = ?, end_time = ? WHERE id = ?',
     [start_time, end_time, session_id],
     function (err) {
-      if (err) return res.status 500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: err.message });
       db.get('SELECT * FROM work_sessions WHERE id = ?', [session_id], (err, session) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(session);
@@ -382,12 +388,12 @@ app.delete('/api/links/:id', (req, res) => {
 });
 
 // 靜態檔案服務（React build）與 SPA fallback，必須放在所有 API 路由之後
-app.use(express.static(path.join(__dirname, 'frontend', 'build')));
+app.use(express.static(path.join(__dirname, 'build')));
 app.get('/{*any}', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API not found' });
   }
-  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
 app.listen(PORT, () => {

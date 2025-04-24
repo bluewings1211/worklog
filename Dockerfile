@@ -14,8 +14,8 @@ RUN npm install
 COPY . .
 
 # 複製前端 build 結果到 server 靜態目錄
-RUN rm -rf ./frontend/build && mkdir -p ./frontend/build
-COPY --from=frontend-build /app/frontend/build ./frontend/build
+RUN rm -rf ./build && mkdir -p ./build
+COPY --from=frontend-build /app/frontend/build ./build
 
 # 預設資料庫目錄
 RUN mkdir -p /app/data
