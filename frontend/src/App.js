@@ -43,6 +43,47 @@ function App() {
   const [links, setLinks] = useState([]);
   const [newLink, setNewLink] = useState({ name: '', url: '', note: '' });
   const [linksLoading, setLinksLoading] = useState(false);
+  const [pomodoroTime, setPomodoroTime] = useState(40 * 60); // 40分鐘，單位：秒
+  const [pomodoroRunning, setPomodoroRunning] = useState(false);
+  const [pomodoroInterval, setPomodoroInterval] = useState(null);
+
+  // 格式化時間 mm:ss
+  const formatTime = (sec) => {
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // 桌面通知
+  const notifyPomodoro = () => {
+    if (Notification.permission === 'granted') {
+      new Notification('蕃茄鐘時間到！', { body: '40分鐘倒數已結束，請休息一下。' });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification('蕃茄鐘時間到！', { body: '40分鐘倒數已結束，請休息一下。' });
+        }
+      });
+    }
+  };
+
+  // 蕃茄鐘倒數邏輯
+  useEffect(() => {
+    if (pomodoroRunning && pomodoroTime > 0) {
+      const timer = setInterval(() => {
+        setPomodoroTime(t => t - 1);
+      }, 1000);
+      setPomodoroInterval(timer);
+      return () => clearInterval(timer);
+    } else if (pomodoroTime === 0 && pomodoroRunning) {
+      setPomodoroRunning(false);
+      notifyPomodoro();
+    }
+    if (!pomodoroRunning && pomodoroInterval) {
+      clearInterval(pomodoroInterval);
+      setPomodoroInterval(null);
+    }
+  }, [pomodoroRunning, pomodoroTime]);
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -318,14 +359,25 @@ function App() {
           )}
         </div>
       </div>
-      {/* 管理按鈕列 */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        <button onClick={() => setShowProjectCodeMgr(true)}>專案代碼管理</button>
-        <button onClick={() => setShowLinksMgr(true)}>常用連結管理</button>
-        <button onClick={() => setShowTaskTypeMgr(true)}>任務類型管理</button>
-        <button onClick={handleSummary} disabled={summaryLoading}>
-          {summaryLoading ? '結算中...' : '結算本日工時'}
-        </button>
+      {/* 管理按鈕列 + 蕃茄鐘 */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={() => setShowProjectCodeMgr(true)}>專案代碼管理</button>
+          <button onClick={() => setShowLinksMgr(true)}>常用連結管理</button>
+          <button onClick={() => setShowTaskTypeMgr(true)}>任務類型管理</button>
+          <button onClick={handleSummary} disabled={summaryLoading}>
+            {summaryLoading ? '結算中...' : '結算本日工時'}
+          </button>
+        </div>
+        {/* 蕃茄鐘區塊（靠右） */}
+        <div style={{ padding: '8px 16px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 180 }}>
+          <div style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>蕃茄鐘（40分鐘）</div>
+          <div style={{ fontSize: 24, fontFamily: 'monospace', marginBottom: 8 }}>{formatTime(pomodoroTime)}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setPomodoroRunning(r => !r)}>{pomodoroRunning ? '暫停' : '開始'}</button>
+            <button onClick={() => { setPomodoroRunning(false); setPomodoroTime(40 * 60); }}>重設</button>
+          </div>
+        </div>
       </div>
       {/* 常用連結按鈕列（顯示在專案代碼管理下方） */}
       {links.length > 0 && (
