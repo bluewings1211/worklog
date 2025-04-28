@@ -15,6 +15,7 @@ const STATUS = [
 ];
 const DELETE_KEY = 'delete';
 const EDIT_KEY = 'edit';
+const INITIAL_POMODORO = 40 * 60;  // 初始蕃茄鐘時長（秒）
 
 function App() {
   const [todos, setTodos] = useState([]);
@@ -43,9 +44,9 @@ function App() {
   const [links, setLinks] = useState([]);
   const [newLink, setNewLink] = useState({ name: '', url: '', note: '' });
   const [linksLoading, setLinksLoading] = useState(false);
-  const [pomodoroTime, setPomodoroTime] = useState(40 * 60); // 40分鐘，單位：秒
+  const [pomodoroTime, setPomodoroTime] = useState(INITIAL_POMODORO);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
-  const [pomodoroInterval, setPomodoroInterval] = useState(null);
+  const startRef = useRef(null);
 
   // 格式化時間 mm:ss
   const formatTime = (sec) => {
@@ -58,32 +59,36 @@ function App() {
   const notifyPomodoro = () => {
     if (Notification.permission === 'granted') {
       new Notification('蕃茄鐘時間到！', { body: '40分鐘倒數已結束，請休息一下。' });
+      window.focus(); // 嘗試讓頁面跳到前景
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
           new Notification('蕃茄鐘時間到！', { body: '40分鐘倒數已結束，請休息一下。' });
+          window.focus(); // 嘗試讓頁面跳到前景
         }
       });
     }
   };
 
-  // 蕃茄鐘倒數邏輯
+  // 蕃茄鐘倒數邏輯 (time-delta)
   useEffect(() => {
-    if (pomodoroRunning && pomodoroTime > 0) {
-      const timer = setInterval(() => {
-        setPomodoroTime(t => t - 1);
-      }, 1000);
-      setPomodoroInterval(timer);
-      return () => clearInterval(timer);
-    } else if (pomodoroTime === 0 && pomodoroRunning) {
+    if (pomodoroRunning) {
+      startRef.current = performance.now() - (INITIAL_POMODORO - pomodoroTime) * 1000;
+      const timerId = setInterval(() => {
+        const elapsed = Math.floor((performance.now() - startRef.current) / 1000);
+        setPomodoroTime(Math.max(0, INITIAL_POMODORO - elapsed));
+      }, 250);
+      return () => clearInterval(timerId);
+    }
+  }, [pomodoroRunning]);
+
+  // 偵測倒數結束
+  useEffect(() => {
+    if (pomodoroTime === 0 && pomodoroRunning) {
       setPomodoroRunning(false);
       notifyPomodoro();
     }
-    if (!pomodoroRunning && pomodoroInterval) {
-      clearInterval(pomodoroInterval);
-      setPomodoroInterval(null);
-    }
-  }, [pomodoroRunning, pomodoroTime]);
+  }, [pomodoroTime, pomodoroRunning]);
 
   // 取得所有待辦事項
   const fetchTodos = async () => {
@@ -375,7 +380,7 @@ function App() {
           <div style={{ fontSize: 24, fontFamily: 'monospace', marginBottom: 8 }}>{formatTime(pomodoroTime)}</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setPomodoroRunning(r => !r)}>{pomodoroRunning ? '暫停' : '開始'}</button>
-            <button onClick={() => { setPomodoroRunning(false); setPomodoroTime(40 * 60); }}>重設</button>
+            <button onClick={() => { setPomodoroRunning(false); setPomodoroTime(INITIAL_POMODORO); }}>重設</button>
           </div>
         </div>
       </div>
