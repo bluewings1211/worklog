@@ -25,6 +25,7 @@ function initDb() {
       status TEXT NOT NULL,
       item_no INTEGER UNIQUE NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_modified TEXT DEFAULT CURRENT_TIMESTAMP,
       license_keys TEXT DEFAULT '[]'
     )`);
     db.run(`CREATE TABLE IF NOT EXISTS work_sessions (
@@ -71,6 +72,64 @@ function initDb() {
         db.run("ALTER TABLE todos ADD COLUMN license_keys TEXT DEFAULT '[]'");
       }
     });
+    // 確保 last_modified 欄位存在
+    db.all("PRAGMA table_info(todos)", [], (err, cols) => {
+      if (!err && Array.isArray(cols) && !cols.find(c => c.name === 'last_modified')) {
+        db.run("ALTER TABLE todos ADD COLUMN last_modified TEXT", (alterErr) => {
+          if (alterErr) {
+            console.error("Error adding last_modified column:", alterErr.message);
+          } else {
+            console.log("Successfully added last_modified column.");
+            // 更新 todos 表中缺少 last_modified 的舊資料
+            db.run(
+              "UPDATE todos SET last_modified = ? WHERE last_modified IS NULL OR last_modified = ''",
+              [new Date().toISOString()],
+              (updateErr) => {
+                if (updateErr) {
+                  console.error("Error updating last_modified for old todos:", updateErr.message);
+                } else {
+                  console.log("Successfully updated last_modified for old todos.");
+                }
+              }
+            );
+          }
+        });
+      }
+    });
+    // 確保 last_modified 欄位存在
+    db.all("PRAGMA table_info(todos)", [], (err, cols) => {
+      if (!err && Array.isArray(cols) && !cols.find(c => c.name === 'last_modified')) {
+        db.run("ALTER TABLE todos ADD COLUMN last_modified TEXT DEFAULT CURRENT_TIMESTAMP", (alterErr) => {
+          if (alterErr) {
+            console.error("Error adding last_modified column:", alterErr.message);
+          } else {
+            console.log("Successfully added last_modified column.");
+            // 更新 todos 表中缺少 last_modified 的舊資料
+            db.run(
+              "UPDATE todos SET last_modified = CURRENT_TIMESTAMP WHERE last_modified IS NULL OR last_modified = ''",
+              (updateErr) => {
+                if (updateErr) {
+                  console.error("Error updating last_modified for old todos:", updateErr.message);
+                } else {
+                  console.log("Successfully updated last_modified for old todos.");
+                }
+              }
+            );
+          }
+        });
+      }
+    });
+    // 更新 todos 表中缺少 last_modified 的舊資料
+    db.run(
+      "UPDATE todos SET last_modified = CURRENT_TIMESTAMP WHERE last_modified IS NULL OR last_modified = ''",
+      (err) => {
+        if (err) {
+          console.error("Error updating last_modified for old todos:", err.message);
+        } else {
+          console.log("Successfully updated last_modified for old todos.");
+        }
+      }
+    );
   });
 }
 
@@ -142,7 +201,7 @@ app.put('/api/todos/:id', (req, res) => {
   db.get('SELECT * FROM todos WHERE id = ?', [id], (err, oldTodo) => {
     if (err || !oldTodo) return res.status(404).json({ error: 'Todo not found' });
     db.run(
-      'UPDATE todos SET project_code=?, task_type=?, description=?, status=?, license_keys=? WHERE id=?',
+      'UPDATE todos SET project_code=?, task_type=?, description=?, status=?, license_keys=?, last_modified=CURRENT_TIMESTAMP WHERE id=?',
       [project_code, task_type, description, status, JSON.stringify(license_keys || []), id],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });

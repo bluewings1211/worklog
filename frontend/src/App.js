@@ -18,6 +18,7 @@ const EDIT_KEY = 'edit';
 const INITIAL_POMODORO = 40 * 60;  // 初始蕃茄鐘時長（秒）
 
 function App() {
+  const [filterRange, setFilterRange] = useState('all'); // 篩選範圍：'all', '3days', '7days', '1month'
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ project_code: '', task_type: '', description: '' });
@@ -96,7 +97,10 @@ function App() {
     try {
       const res = await fetch('/api/todos');
       const data = await res.json();
-      setTodos(data);
+      setTodos(data.map(todo => ({
+          ...todo,
+          last_modified: new Date(todo.last_modified) // 確保 last_modified 是 Date 物件
+        })));
     } catch (e) {
       setError('載入失敗');
     }
@@ -415,7 +419,15 @@ function App() {
       {loading ? (
         <div>載入中...</div>
       ) : (
+
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {/* 篩選按鈕 */}
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={() => setFilterRange('all')} disabled={filterRange === 'all'}>全部</button>
+          <button onClick={() => setFilterRange('3days')} disabled={filterRange === '3days'}>近三天</button>
+          <button onClick={() => setFilterRange('7days')} disabled={filterRange === '7days'}>近七天</button>
+          <button onClick={() => setFilterRange('1month')} disabled={filterRange === '1month'}>近一個月</button>
+        </div>
           {/* 狀態佇列 */}
           <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
             {STATUS.map(s => (
@@ -432,7 +444,20 @@ function App() {
                   <DroppableDeleteColumn id={DELETE_KEY + '_' + s.key} label="Delete" />
                 </div>
                 <DroppableColumn id={s.key} label={s.label}>
-                  <SortableContext items={todos.filter(t => t.status === s.key).map(t => t.id)} strategy={verticalListSortingStrategy}>
+                  <SortableContext
+                      items={todos
+                        .filter(t => {
+                          if (filterRange === 'all') return true;
+                          const now = new Date();
+                          const diffDays = (now - t.last_modified) / (1000 * 60 * 60 * 24);
+                          if (filterRange === '3days') return diffDays <= 3;
+                          if (filterRange === '7days') return diffDays <= 7;
+                          if (filterRange === '1month') return diffDays <= 30;
+                          return true;
+                        })
+                        .filter(t => t.status === s.key)
+                        .map(t => t.id)}
+                      strategy={verticalListSortingStrategy}>
                     {todos.filter(t => t.status === s.key).length === 0 && (
                       <div style={{ color: '#aaa', textAlign: 'center', marginTop: 32 }}>無資料</div>
                     )}
