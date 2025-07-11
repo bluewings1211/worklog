@@ -36,3 +36,51 @@
     transform: rotate(360deg);
   }
 }
+
+/* Button border fix - ensure all buttons have visible borders */
+.btn {
+  border: 1px solid currentColor !important;
+  border-radius: 0.375rem;
+}
+
+.btn-outline {
+  border: 1px solid currentColor !important;
+  background-color: transparent;
+}
+
+.btn-primary {
+  border: 1px solid #3b82f6 !important;
+}
+
+.btn-success {
+  border: 1px solid #10b981 !important;
+}
+
+.btn-error {
+  border: 1px solid #ef4444 !important;
+}
+
+.btn-warning {
+  border: 1px solid #f59e0b !important;
+}
+
+.btn-info {
+  border: 1px solid #3b82f6 !important;
+}
+
+.btn-ghost {
+  border: 1px solid #9ca3af !important;
+}
+
+.btn-sm {
+  border: 1px solid currentColor !important;
+}
+
+.btn-xs {
+  border: 1px solid currentColor !important;
+}
+
+/* Ensure hover states maintain borders */
+.btn:hover {
+  border: 1px solid currentColor !important;
+}
