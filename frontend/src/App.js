@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './App.css';
-import { DndContext, closestCenter, useDroppable } from '@dnd-kit/core';
+import { DndContext, closestCenter, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDraggable } from '@dnd-kit/core';
 import Calendar from 'react-calendar';
@@ -45,6 +45,9 @@ function App() {
   const [pomodoroTime, setPomodoroTime] = useState(INITIAL_POMODORO);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const startRef = useRef(null);
+
+  // 拖曳狀態
+  const [activeDragId, setActiveDragId] = useState(null);
 
   // 格式化時間 mm:ss
   const formatTime = (sec) => {
@@ -126,9 +129,16 @@ function App() {
     }
   };
 
+  // 拖曳開始時，記錄拖曳的任務
+  const handleDragStart = (event) => {
+    setActiveDragId(event.active.id);
+  };
+
   // 拖曳結束時，更新卡片狀態
   const handleDragEnd = async (event) => {
     const { active, over } = event;
+    setActiveDragId(null); // 清除拖曳狀態
+    
     if (!over || !active) return;
     const todoId = active.id;
     const newStatus = over.id;
@@ -619,7 +629,7 @@ function App() {
             <p className="text-gray-600 font-medium text-lg">載入中...</p>
           </motion.div>
         ) : (
-          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             {/* 篩選器 */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -805,32 +815,59 @@ function App() {
                 </motion.div>
               ))}
             </motion.div>
+            
+            {/* DragOverlay 用於拖曳時的視覺效果 */}
+            <DragOverlay>
+              {activeDragId ? (() => {
+                const draggedTodo = todos.find(t => t.id === activeDragId);
+                if (!draggedTodo) return null;
+                
+                return (
+                  <div className="task-card dragging bg-white/95 backdrop-blur-sm rounded-2xl p-4 shadow-lg border-2 border-indigo-400 cursor-grabbing relative transform rotate-3 scale-105">
+                    <div className="flex items-center font-bold text-sm mb-2">
+                      <span className="text-indigo-600">{draggedTodo.project_code}</span>
+                      <span className="font-normal text-gray-500 ml-1">[{draggedTodo.task_type}]</span>
+                    </div>
+                    <div className="text-xs text-gray-700 leading-relaxed">
+                      {draggedTodo.description}
+                    </div>
+                  </div>
+                );
+              })() : null}
+            </DragOverlay>
           </DndContext>
         )}
 
         {/* 新增任務 Modal */}
         {showNewModal && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced w-11/12 max-w-md">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => setShowNewModal(false)}
-                >
-                  ✕
-                </button>
-              </form>
-              <h3 className="font-bold text-lg mb-4 text-gray-800">
-                新增任務到「{STATUS.find(s => s.key === newCardStatus)?.label}」
-              </h3>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-lg">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => setShowNewModal(false)}
+              >
+                ✕
+              </button>
               
-              <form onSubmit={handleAddTodo} className="space-y-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`w-12 h-12 bg-gradient-to-br ${STATUS.find(s => s.key === newCardStatus)?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center`}>
+                  <Plus className="w-6 h-6 text-white" />
+                </div>
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">專案代碼</span>
+                  <h3 className="text-xl font-bold text-gray-800">新增任務</h3>
+                  <p className="text-sm text-gray-600">
+                    新增到「<span className="font-medium text-indigo-600">{STATUS.find(s => s.key === newCardStatus)?.label}</span>」
+                  </p>
+                </div>
+              </div>
+              
+              <form onSubmit={handleAddTodo} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    專案代碼 <span className="text-red-500">*</span>
                   </label>
                   <select 
-                    className="select select-bordered w-full"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all duration-200 bg-white"
                     value={form.project_code}
                     onChange={(e) => setForm(prev => ({ ...prev, project_code: e.target.value }))}
                     required
@@ -843,11 +880,11 @@ function App() {
                 </div>
 
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">任務類型</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    任務類型 <span className="text-red-500">*</span>
                   </label>
                   <select 
-                    className="select select-bordered w-full"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all duration-200 bg-white"
                     value={form.task_type}
                     onChange={(e) => setForm(prev => ({ ...prev, task_type: e.target.value }))}
                     required
@@ -860,30 +897,31 @@ function App() {
                 </div>
 
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">任務描述</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    任務描述
                   </label>
                   <textarea 
-                    className="textarea textarea-bordered w-full"
-                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all duration-200 resize-none"
+                    rows={4}
                     value={form.description}
                     onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="請輸入任務描述..."
+                    placeholder="請詳細描述任務內容..."
                   />
                 </div>
 
-                <div className="modal-action">
+                <div className="flex gap-3 pt-4">
                   <button 
                     type="button" 
-                    className="btn btn-ghost" 
+                    className="flex-1 py-3 px-4 border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors duration-200"
                     onClick={() => setShowNewModal(false)}
                   >
                     取消
                   </button>
                   <button 
                     type="submit" 
-                    className="btn btn-primary"
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
                   >
+                    <Plus className="w-4 h-4" />
                     新增任務
                   </button>
                 </div>
@@ -894,68 +932,91 @@ function App() {
 
         {/* 編輯任務 Modal */}
         {editTodo && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced w-11/12 max-w-md">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => { setEditTodo(null); setEditDesc(''); }}
-                >
-                  ✕
-                </button>
-              </form>
-              <h3 className="font-bold text-lg mb-4 text-gray-800">編輯任務</h3>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-lg">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => { setEditTodo(null); setEditDesc(''); }}
+              >
+                ✕
+              </button>
               
-              <form onSubmit={handleEditTodo} className="space-y-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`w-12 h-12 bg-gradient-to-br ${STATUS.find(s => s.key === editTodo.status)?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center`}>
+                  <Edit className="w-6 h-6 text-white" />
+                </div>
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">專案代碼</span>
+                  <h3 className="text-xl font-bold text-gray-800">編輯任務</h3>
+                  <p className="text-sm text-gray-600">
+                    狀態：<span className="font-medium text-indigo-600">{STATUS.find(s => s.key === editTodo.status)?.label}</span>
+                  </p>
+                </div>
+              </div>
+              
+              <form onSubmit={handleEditTodo} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    專案代碼
                   </label>
-                  <input 
-                    type="text"
-                    className="input input-bordered w-full bg-gray-100"
-                    value={editTodo.project_code}
-                    disabled
-                  />
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-600 cursor-not-allowed"
+                      value={editTodo.project_code}
+                      disabled
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">專案代碼無法修改</p>
                 </div>
 
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">任務類型</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    任務類型
                   </label>
-                  <input 
-                    type="text"
-                    className="input input-bordered w-full bg-gray-100"
-                    value={editTodo.task_type}
-                    disabled
-                  />
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-600 cursor-not-allowed"
+                      value={editTodo.task_type}
+                      disabled
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">任務類型無法修改</p>
                 </div>
 
                 <div>
-                  <label className="label">
-                    <span className="label-text font-medium">任務描述</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    任務描述
                   </label>
                   <textarea 
-                    className="textarea textarea-bordered w-full"
-                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all duration-200 resize-none"
+                    rows={5}
                     value={editDesc}
                     onChange={(e) => setEditDesc(e.target.value)}
-                    placeholder="請輸入任務描述..."
+                    placeholder="請詳細描述任務內容..."
                   />
+                  <p className="text-xs text-gray-500 mt-1">您可以修改任務的詳細描述</p>
                 </div>
 
-                <div className="modal-action">
+                <div className="flex gap-3 pt-4">
                   <button 
                     type="button" 
-                    className="btn btn-ghost" 
+                    className="flex-1 py-3 px-4 border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors duration-200"
                     onClick={() => { setEditTodo(null); setEditDesc(''); }}
                   >
                     取消
                   </button>
                   <button 
                     type="submit" 
-                    className="btn btn-primary"
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-red-700 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
                   >
+                    <Edit className="w-4 h-4" />
                     更新任務
                   </button>
                 </div>
@@ -966,35 +1027,65 @@ function App() {
 
         {/* 專案代碼管理 Modal */}
         {showProjectCodeMgr && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => setShowProjectCodeMgr(false)}
-                >
-                  ✕
-                </button>
-              </form>
-              <h3 className="font-bold text-lg mb-4">專案代碼管理</h3>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-md">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => setShowProjectCodeMgr(false)}
+              >
+                ✕
+              </button>
               
-              <div className="flex gap-2 mb-3">
-                <input 
-                  className="input input-bordered input-sm flex-1" 
-                  value={newProjectCode} 
-                  onChange={e => setNewProjectCode(e.target.value)} 
-                  placeholder="新增專案代碼" 
-                />
-                <button className="btn btn-primary btn-sm" onClick={handleAddProjectCode}>新增</button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <Settings className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  專案代碼管理
+                </h3>
               </div>
               
-              <div className="max-h-60 overflow-y-auto">
-                {projectCodes.map(code => (
-                  <div key={code} className="flex items-center justify-between border-b border-gray-200 py-2">
-                    <span>{code}</span>
-                    <button className="btn btn-error btn-xs" onClick={() => handleDeleteProjectCode(code)}>刪除</button>
+              <div className="flex gap-3 mb-6">
+                <input 
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200" 
+                  value={newProjectCode} 
+                  onChange={e => setNewProjectCode(e.target.value)} 
+                  placeholder="輸入新的專案代碼"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddProjectCode()}
+                />
+                <button 
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 hover:scale-105 active:scale-95"
+                  onClick={handleAddProjectCode}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {projectCodes.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Settings className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-medium">暫無專案代碼</p>
                   </div>
-                ))}
+                ) : (
+                  projectCodes.map(code => (
+                    <div key={code} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+                        <span className="font-medium text-gray-800">{code}</span>
+                      </div>
+                      <button 
+                        className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-1"
+                        onClick={() => handleDeleteProjectCode(code)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        刪除
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1002,35 +1093,65 @@ function App() {
 
         {/* 任務類型管理 Modal */}
         {showTaskTypeMgr && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => setShowTaskTypeMgr(false)}
-                >
-                  ✕
-                </button>
-              </form>
-              <h3 className="font-bold text-lg mb-4">任務類型管理</h3>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-md">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => setShowTaskTypeMgr(false)}
+              >
+                ✕
+              </button>
               
-              <div className="flex gap-2 mb-3">
-                <input 
-                  className="input input-bordered input-sm flex-1" 
-                  value={newTaskType} 
-                  onChange={e => setNewTaskType(e.target.value)} 
-                  placeholder="新增任務類型" 
-                />
-                <button className="btn btn-primary btn-sm" onClick={handleAddTaskType}>新增</button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  任務類型管理
+                </h3>
               </div>
               
-              <div className="max-h-60 overflow-y-auto">
-                {taskTypes.map(type => (
-                  <div key={type} className="flex items-center justify-between border-b border-gray-200 py-2">
-                    <span>{type}</span>
-                    <button className="btn btn-error btn-xs" onClick={() => handleDeleteTaskType(type)}>刪除</button>
+              <div className="flex gap-3 mb-6">
+                <input 
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all duration-200" 
+                  value={newTaskType} 
+                  onChange={e => setNewTaskType(e.target.value)} 
+                  placeholder="輸入新的任務類型"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddTaskType()}
+                />
+                <button 
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-700 transition-all duration-200 hover:scale-105 active:scale-95"
+                  onClick={handleAddTaskType}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {taskTypes.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <BarChart3 className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-medium">暫無任務類型</p>
                   </div>
-                ))}
+                ) : (
+                  taskTypes.map(type => (
+                    <div key={type} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+                        <span className="font-medium text-gray-800">{type}</span>
+                      </div>
+                      <button 
+                        className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-1"
+                        onClick={() => handleDeleteTaskType(type)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        刪除
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1038,51 +1159,93 @@ function App() {
 
         {/* 常用連結管理 Modal */}
         {showLinksMgr && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => setShowLinksMgr(false)}
-                >
-                  ✕
-                </button>
-              </form>
-              <h3 className="font-bold text-lg mb-4">常用連結管理</h3>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-lg">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => setShowLinksMgr(false)}
+              >
+                ✕
+              </button>
               
-              <div className="grid grid-cols-1 gap-2 mb-3">
-                <input 
-                  className="input input-bordered input-sm" 
-                  value={newLink.name} 
-                  onChange={e => setNewLink(l => ({ ...l, name: e.target.value }))} 
-                  placeholder="名稱" 
-                />
-                <input 
-                  className="input input-bordered input-sm" 
-                  value={newLink.url} 
-                  onChange={e => setNewLink(l => ({ ...l, url: e.target.value }))} 
-                  placeholder="URL" 
-                />
-                <input 
-                  className="input input-bordered input-sm" 
-                  value={newLink.note} 
-                  onChange={e => setNewLink(l => ({ ...l, note: e.target.value }))} 
-                  placeholder="備註" 
-                />
-                <button className="btn btn-primary btn-sm" onClick={handleAddLink}>新增</button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
+                  <Link className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                  常用連結管理
+                </h3>
               </div>
               
-              <div className="max-h-60 overflow-y-auto">
-                {links.map(link => (
-                  <div key={link.id} className="flex items-center justify-between border-b border-gray-200 py-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-cyan-700">{link.name}</div>
-                      <div className="text-sm text-gray-500 truncate">{link.url}</div>
-                      {link.note && <div className="text-xs text-gray-400">{link.note}</div>}
+              <div className="space-y-3 mb-6">
+                <input 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all duration-200" 
+                  value={newLink.name} 
+                  onChange={e => setNewLink(l => ({ ...l, name: e.target.value }))} 
+                  placeholder="連結名稱"
+                />
+                <input 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all duration-200" 
+                  value={newLink.url} 
+                  onChange={e => setNewLink(l => ({ ...l, url: e.target.value }))} 
+                  placeholder="連結網址 (https://...)"
+                  type="url"
+                />
+                <input 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all duration-200" 
+                  value={newLink.note} 
+                  onChange={e => setNewLink(l => ({ ...l, note: e.target.value }))} 
+                  placeholder="備註說明 (選填)"
+                />
+                <button 
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-medium hover:from-emerald-600 hover:to-teal-700 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+                  onClick={handleAddLink}
+                >
+                  <Plus className="w-4 h-4" />
+                  新增連結
+                </button>
+              </div>
+              
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {links.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Link className="w-8 h-8 text-gray-400" />
                     </div>
-                    <button className="btn btn-error btn-xs ml-2" onClick={() => handleDeleteLink(link.id)}>刪除</button>
+                    <p className="text-gray-500 font-medium">暫無常用連結</p>
                   </div>
-                ))}
+                ) : (
+                  links.map(link => (
+                    <div key={link.id} className="p-4 bg-white rounded-xl border border-gray-100 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"></div>
+                            <h4 className="font-bold text-gray-800 truncate">{link.name}</h4>
+                          </div>
+                          <a 
+                            href={link.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-sm text-emerald-600 hover:text-emerald-700 underline block truncate mb-1"
+                          >
+                            {link.url}
+                          </a>
+                          {link.note && (
+                            <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2 py-1">{link.note}</p>
+                          )}
+                        </div>
+                        <button 
+                          className="ml-3 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-1 flex-shrink-0"
+                          onClick={() => handleDeleteLink(link.id)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          刪除
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1090,32 +1253,70 @@ function App() {
 
         {/* 工時結算 Modal */}
         {showSummary && (
-          <div className="modal modal-open modal-enhanced">
-            <div className="modal-box modal-box-enhanced w-11/12 max-w-2xl">
-              <form method="dialog">
-                <button 
-                  className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" 
-                  onClick={() => setShowSummary(false)}
-                >
-                  ✕
-                </button>
-              </form>
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold text-lg">本日工時 JSON</h3>
-                <button className="btn btn-ghost btn-sm" onClick={handleCopySummary} title="複製到剪貼簿">
-                  📋
-                </button>
+          <div className="modal-enhanced">
+            <div className="modal-box-enhanced w-full max-w-4xl">
+              <button 
+                className="absolute right-4 top-4 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200" 
+                onClick={() => setShowSummary(false)}
+              >
+                ✕
+              </button>
+              
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">工時結算報告</h3>
+                  <p className="text-sm text-gray-600">今日工作時間統計與數據導出</p>
+                </div>
               </div>
               
-              <textarea
-                className="textarea textarea-bordered w-full h-60 font-mono text-sm"
-                ref={summaryRef}
-                value={summaryJson}
-                onChange={e => setSummaryJson(e.target.value)}
-              />
+              <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl p-4 mb-6 border border-cyan-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
+                      <Clock className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-800">JSON 數據格式</h4>
+                      <p className="text-sm text-gray-600">可直接複製用於報告或系統整合</p>
+                    </div>
+                  </div>
+                  <button 
+                    className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2"
+                    onClick={handleCopySummary} 
+                    title="複製到剪貼簿"
+                  >
+                    <div className="w-4 h-4">📋</div>
+                    複製
+                  </button>
+                </div>
+              </div>
               
-              <div className="modal-action">
-                <button className="btn btn-sm" onClick={() => setShowSummary(false)}>關閉</button>
+              <div className="relative">
+                <textarea
+                  className="w-full h-80 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none transition-all duration-200 font-mono text-sm bg-gray-50 resize-none"
+                  ref={summaryRef}
+                  value={summaryJson}
+                  onChange={e => setSummaryJson(e.target.value)}
+                  placeholder="工時數據將顯示在這裡..."
+                />
+                <div className="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded">
+                  JSON 格式
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+                <div className="text-sm text-gray-500">
+                  💡 提示：此數據可用於薪資計算、專案追蹤或時間管理分析
+                </div>
+                <button 
+                  className="px-6 py-2 border border-gray-200 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors duration-200"
+                  onClick={() => setShowSummary(false)}
+                >
+                  關閉
+                </button>
               </div>
             </div>
           </div>
@@ -1150,9 +1351,10 @@ function DraggableTodo({ todo, onEdit, onDelete }) {
       {...attributes}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/30 transition-all duration-300 cursor-grab relative ${isDragging ? 'opacity-70 scale-105 rotate-3' : 'hover:shadow-xl hover:scale-102'}`}
+      className={`task-card bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/30 transition-all duration-300 cursor-grab relative ${isDragging ? 'dragging opacity-70 scale-105 rotate-3' : 'hover:shadow-xl hover:scale-102'}`}
       style={{
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        zIndex: isDragging ? 9999 : 'auto',
       }}
     >
       {/* 拖曳區域 */}
