@@ -100,7 +100,7 @@ function App() {
       const todosArray = Array.isArray(data) ? data : [];
       setTodos(todosArray.map(todo => ({
           ...todo,
-          last_modified: new Date(todo.last_modified) // 確保 last_modified 是 Date 物件
+          last_modified: todo.last_modified ? new Date(todo.last_modified) : new Date() // 確保 last_modified 是 Date 物件，預設為當前時間
         })));
     } catch (e) {
       setError('載入失敗');
@@ -154,6 +154,8 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...todo, status: newStatus })
         });
+        // 更新成功後重新載入資料，確保 last_modified 時間正確
+        fetchTodos();
       } catch (e) {
         fetchTodos();
       }
@@ -222,7 +224,12 @@ function App() {
   const fetchCalendarLogs = async () => {
     setCalendarLoading(true);
     try {
-      const res = await fetch(`/api/summary/today?date=${calendarDate.toISOString().split('T')[0]}`);
+      // 使用本地時區的年月日，避免時區轉換問題
+      const year = calendarDate.getFullYear();
+      const month = String(calendarDate.getMonth() + 1).padStart(2, '0');
+      const day = String(calendarDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      const res = await fetch(`/api/summary/today?date=${dateStr}`);
       const data = await res.json();
       setCalendarLogs(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -243,7 +250,7 @@ function App() {
       const res = await fetch(`/api/summary/today?date=${today}`);
       const data = await res.json();
       const logsArray = Array.isArray(data) ? data : [];
-      setSummaryJson(JSON.stringify({ date: today, logs: logsArray }, null, 2));
+      setSummaryJson(JSON.stringify(logsArray, null, 2));
       setShowSummary(true);
     } catch (e) {
       setError('結算失敗');

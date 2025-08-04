@@ -163,9 +163,10 @@ app.post('/api/todos', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     const nextNo = (row?.maxNo || 0) + 1;
     const todoStatus = status || 'pending';
+    const now = new Date().toISOString();
     db.run(
-      'INSERT INTO todos (project_code, task_type, description, status, item_no, license_keys) VALUES (?, ?, ?, ?, ?, ?)',
-      [project_code, task_type, description || '', todoStatus, nextNo, '[]'],
+      'INSERT INTO todos (project_code, task_type, description, status, item_no, license_keys, created_at, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [project_code, task_type, description || '', todoStatus, nextNo, '[]', now, now],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
         const todoId = this.lastID;
