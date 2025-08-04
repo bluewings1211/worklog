@@ -147,17 +147,39 @@ function App() {
     if (!STATUS.some(s => s.key === newStatus)) return;
     const todo = todos.find(t => t.id === todoId);
     if (todo && todo.status !== newStatus) {
-      setTodos(prev => prev.map(t => t.id === todoId ? { ...t, status: newStatus } : t));
+      // 樂觀更新：立即更新本地狀態
+      setTodos(prev => prev.map(t => 
+        t.id === todoId ? { ...t, status: newStatus } : t
+      ));
+      
       try {
-        await fetch(`/api/todos/${todoId}`, {
+        // 發送 API 請求
+        const response = await fetch(`/api/todos/${todoId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...todo, status: newStatus })
         });
-        // 更新成功後重新載入資料，確保 last_modified 時間正確
-        fetchTodos();
+        
+        if (!response.ok) {
+          throw new Error('更新失敗');
+        }
+        
+        // 使用後端回傳的精確資料更新特定項目
+        const updatedTodo = await response.json();
+        setTodos(prev => prev.map(t => 
+          t.id === todoId ? {
+            ...updatedTodo,
+            last_modified: new Date(updatedTodo.last_modified)
+          } : t
+        ));
       } catch (e) {
-        fetchTodos();
+        // 錯誤時回復原狀態
+        setTodos(prev => prev.map(t => 
+          t.id === todoId ? todo : t
+        ));
+        setError('拖曳更新失敗，請重試');
+        // 清除錯誤訊息
+        setTimeout(() => setError(''), 3000);
       }
     }
   };
