@@ -95,7 +95,7 @@
 }
 
 .react-calendar-modern .react-calendar__navigation {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
   border-radius: 1rem 1rem 0 0;
   padding: 1rem;
   display: flex;
@@ -154,13 +154,13 @@
 }
 
 .react-calendar-modern .react-calendar__tile:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
   color: white;
   transform: scale(1.05);
 }
 
 .react-calendar-modern .react-calendar__tile--active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
   color: white;
   font-weight: bold;
 }
@@ -195,12 +195,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
 }
 
 /* Glass morphism effect */

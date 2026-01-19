@@ -4,41 +4,7 @@
 
 /* GitHub 風格自訂樣式 */
 @layer components {
-  .kanban-column-todo {
-    @apply bg-blue-50 border-l-4 border-blue-500;
-  }
-  
-  .kanban-column-progress {
-    @apply bg-amber-50 border-l-4 border-amber-500;
-  }
-  
-  .kanban-column-done {
-    @apply bg-green-50 border-l-4 border-green-500;
-  }
-  
-  .kanban-column-archive {
-    @apply bg-gray-50 border-l-4 border-gray-400;
-  }
-  
-  .kanban-card {
-    @apply bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200;
-  }
-  
-  .kanban-card-todo {
-    @apply border-l-4 border-l-blue-500 hover:border-l-blue-600;
-  }
-  
-  .kanban-card-progress {
-    @apply border-l-4 border-l-amber-500 hover:border-l-amber-600;
-  }
-  
-  .kanban-card-done {
-    @apply border-l-4 border-l-green-500 hover:border-l-green-600;
-  }
-  
-  .kanban-card-archive {
-    @apply border-l-4 border-l-gray-400 hover:border-l-gray-500;
-  }
+  /* Kanban styles managed by Tailwind utility classes in App.js now */
 }
 
 body {

@@ -6,13 +6,13 @@ import { useDraggable } from '@dnd-kit/core';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Clock, Calendar as CalendarIcon, Settings, Link, BarChart3, Play, Pause, RotateCcw, Edit, Trash2, Filter } from 'lucide-react';
+import { Plus, Clock, Calendar as CalendarIcon, Settings, Link, BarChart3, Play, Pause, RotateCcw, Edit, Trash2, Filter, Zap, CheckCircle2, Archive, ListTodo } from 'lucide-react';
 
 const STATUS = [
-  { key: 'pending', label: '待處理', color: 'from-slate-100 to-slate-200', borderColor: 'border-slate-300', textColor: 'text-slate-700', icon: '📋' },
-  { key: 'in_progress', label: '進行中', color: 'from-blue-100 to-blue-200', borderColor: 'border-blue-300', textColor: 'text-blue-700', icon: '⚡' },
-  { key: 'done', label: '已完成', color: 'from-green-100 to-green-200', borderColor: 'border-green-300', textColor: 'text-green-700', icon: '✅' },
-  { key: 'archive', label: '封存', color: 'from-purple-100 to-purple-200', borderColor: 'border-purple-300', textColor: 'text-purple-700', icon: '📦' },
+  { key: 'pending', label: '待處理', color: 'from-slate-100 to-slate-200', borderColor: 'border-slate-300', textColor: 'text-slate-700', Icon: ListTodo },
+  { key: 'in_progress', label: '進行中', color: 'from-blue-100 to-blue-200', borderColor: 'border-blue-300', textColor: 'text-blue-700', Icon: Zap },
+  { key: 'done', label: '已完成', color: 'from-green-100 to-green-200', borderColor: 'border-green-300', textColor: 'text-green-700', Icon: CheckCircle2 },
+  { key: 'archive', label: '封存', color: 'from-purple-100 to-purple-200', borderColor: 'border-purple-300', textColor: 'text-purple-700', Icon: Archive },
 ];
 const INITIAL_POMODORO = 40 * 60;  // 初始蕃茄鐘時長（秒）
 
@@ -114,12 +114,30 @@ function App() {
     fetchTodos();
     fetchProjectCodes();
     fetchTaskTypes();
-    fetchCalendarLogs();
+    // fetchCalendarLogs(); // 移除重複調用，只在 calendarDate 變更時載入
     fetchLinks();
+  }, []);
+
+  // 監聽 ESC 鍵關閉 Modal
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        setShowNewModal(false);
+        setEditTodo(null);
+        setShowProjectCodeMgr(false);
+        setShowTaskTypeMgr(false);
+        setShowLinksMgr(false);
+        setShowSummary(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
   // 刪除功能：樂觀更新，先移除再呼叫後端
   const handleDelete = async (id) => {
+    if (!window.confirm('確定要刪除此任務嗎？此操作無法復原。')) return;
+
     setTodos(prev => prev.filter(t => t.id !== id));
     try {
       await fetch(`/api/todos/${id}`, { method: 'DELETE' });
@@ -381,40 +399,110 @@ function App() {
           transition={{ duration: 0.8 }}
           className="text-center mb-10"
         >
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent mb-4">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent mb-4">
             ✨ 智能工作台
           </h1>
           <p className="text-gray-600 text-lg font-medium">高效管理您的工作流程</p>
         </motion.div>
 
-        {/* 日曆與工時統計 */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8"
-        >
-          <div className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 hover:shadow-3xl transition-all duration-300">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                  <CalendarIcon className="w-5 h-5 text-white" />
+        {/* 布局調整：蕃茄鐘與工時統計在左 (2/3)，日曆在右 (1/3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+          {/* 左側欄位：蕃茄鐘 + 工時統計 */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* 管理工具列與蕃茄鐘 */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 hover:shadow-3xl transition-all duration-300"
+            >
+              <div className="flex flex-col xl:flex-row gap-6 items-start xl:items-center justify-between">
+                <div className="flex-1 w-full">
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-indigo-600" />
+                    管理工具
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <button 
+                      className="flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 text-sm"
+                      onClick={() => setShowProjectCodeMgr(true)}
+                    >
+                      <Settings className="w-4 h-4" />
+                      專案管理
+                    </button>
+                    <button 
+                      className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 text-sm"
+                      onClick={() => setShowLinksMgr(true)}
+                    >
+                      <Link className="w-4 h-4" />
+                      連結管理
+                    </button>
+                    <button 
+                      className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 text-sm"
+                      onClick={() => setShowTaskTypeMgr(true)}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      任務類型
+                    </button>
+                    <button 
+                      className={`flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 text-sm ${summaryLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
+                      onClick={handleSummary} 
+                      disabled={summaryLoading}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      {summaryLoading ? '結算中' : '工時結算'}
+                    </button>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-gray-800">日曆選擇</h3>
+                
+                {/* 蕃茄鐘區塊 - 調整樣式 */}
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="w-full xl:w-auto bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl p-4 min-w-fit flex items-center justify-between xl:block"
+                >
+                  <div className="flex items-center gap-4 xl:block xl:text-center">
+                    <div className="flex items-center gap-2 mb-0 xl:mb-2">
+                      <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center">
+                        <Clock className="w-4 h-4 text-white" />
+                      </div>
+                      <h4 className="font-bold text-amber-700 hidden sm:block">蕃茄鐘</h4>
+                    </div>
+                    <div className="text-2xl xl:text-3xl font-mono text-amber-800 font-bold xl:mb-3">{formatTime(pomodoroTime)}</div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button 
+                      className={`flex items-center gap-1 px-3 py-2 rounded-xl font-medium text-white transition-all duration-200 text-sm ${
+                        pomodoroRunning 
+                          ? 'bg-gradient-to-r from-red-500 to-pink-600 hover:shadow-lg' 
+                          : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg'
+                      }`} 
+                      onClick={() => setPomodoroRunning(r => !r)}
+                    >
+                      {pomodoroRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                      {pomodoroRunning ? '暫停' : '開始'}
+                    </button>
+                    <button 
+                      className="flex items-center gap-1 bg-gradient-to-r from-gray-400 to-gray-500 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 text-sm" 
+                      onClick={() => { setPomodoroRunning(false); setPomodoroTime(INITIAL_POMODORO); }}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      重設
+                    </button>
+                  </div>
+                </motion.div>
               </div>
-              <div className="calendar-container rounded-2xl overflow-hidden">
-                <Calendar
-                  onChange={setCalendarDate}
-                  value={calendarDate}
-                  locale="zh-TW"
-                  className="react-calendar-modern"
-                />
-              </div>
-            </div>
-          </div>
-          
-          <div className="lg:col-span-2">
-            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 hover:shadow-3xl transition-all duration-300">
+            </motion.div>
+
+            {/* 工時統計區塊 */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 hover:shadow-3xl transition-all duration-300"
+            >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
@@ -496,103 +584,34 @@ function App() {
                   </>
                 )}
               </div>
-            </div>
+            </motion.div>
           </div>
-        </motion.div>
-        
-        {/* 管理工具列與蕃茄鐘 */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 mb-8 hover:shadow-3xl transition-all duration-300"
-        >
-          <div className="flex flex-col xl:flex-row gap-6 items-start xl:items-center justify-between">
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-indigo-600" />
-                管理工具
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button 
-                  className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95"
-                  onClick={() => setShowProjectCodeMgr(true)}
-                >
-                  <Settings className="w-4 h-4" />
-                  專案管理
-                </button>
-                <button 
-                  className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95"
-                  onClick={() => setShowLinksMgr(true)}
-                >
-                  <Link className="w-4 h-4" />
-                  連結管理
-                </button>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200"
-                  onClick={() => setShowTaskTypeMgr(true)}
-                >
-                  <Settings className="w-4 h-4" />
-                  任務類型
-                </motion.button>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200 ${summaryLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
-                  onClick={handleSummary} 
-                  disabled={summaryLoading}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  {summaryLoading ? '結算中...' : '工時結算'}
-                </motion.button>
-              </div>
-            </div>
-            
-            {/* 蕃茄鐘區塊 */}
+
+          {/* 右側欄位：日曆 */}
+          <div className="lg:col-span-1">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-3xl p-6 min-w-fit"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-6 hover:shadow-3xl transition-all duration-300 h-full"
             >
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center">
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                  <h4 className="font-bold text-amber-700">蕃茄鐘 40分鐘</h4>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <CalendarIcon className="w-5 h-5 text-white" />
                 </div>
-                <div className="text-3xl font-mono mb-4 text-amber-800 font-bold">{formatTime(pomodoroTime)}</div>
-                <div className="flex gap-2 justify-center">
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className={`flex items-center gap-1 px-3 py-2 rounded-xl font-medium text-white transition-all duration-200 ${
-                      pomodoroRunning 
-                        ? 'bg-gradient-to-r from-red-500 to-pink-600 hover:shadow-lg' 
-                        : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg'
-                    }`} 
-                    onClick={() => setPomodoroRunning(r => !r)}
-                  >
-                    {pomodoroRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                    {pomodoroRunning ? '暫停' : '開始'}
-                  </motion.button>
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="flex items-center gap-1 bg-gradient-to-r from-gray-400 to-gray-500 text-white px-3 py-2 rounded-xl font-medium hover:shadow-lg transition-all duration-200" 
-                    onClick={() => { setPomodoroRunning(false); setPomodoroTime(INITIAL_POMODORO); }}
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    重設
-                  </motion.button>
-                </div>
+                <h3 className="text-lg font-bold text-gray-800">日曆選擇</h3>
+              </div>
+              <div className="calendar-container rounded-2xl overflow-hidden">
+                <Calendar
+                  onChange={setCalendarDate}
+                  value={calendarDate}
+                  locale="zh-TW"
+                  className="react-calendar-modern"
+                />
               </div>
             </motion.div>
           </div>
-        </motion.div>
+        </div>
 
         {/* 常用連結区域 */}
         {links.length > 0 && (
@@ -637,7 +656,7 @@ function App() {
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 mb-6"
+            className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-2xl p-4 mb-6 shadow-sm"
           >
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-500 rounded-xl flex items-center justify-center">
@@ -747,8 +766,8 @@ function App() {
                   <div className="p-6 border-b border-white/30">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center text-xl`}>
-                          {s.icon}
+                        <div className={`w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center`}>
+                          <s.Icon className={`w-5 h-5 ${s.textColor}`} />
                         </div>
                         <h3 className={`font-bold text-lg ${s.textColor}`}>{s.label}</h3>
                       </div>
@@ -806,9 +825,9 @@ function App() {
                         }).filter(t => t.status === s.key).length === 0 && (
                           <div className="text-center py-12">
                             <div className="w-16 h-16 bg-white/30 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                              <div className="text-2xl opacity-50">📝</div>
+                              <s.Icon className={`w-8 h-8 ${s.textColor} opacity-50`} />
                             </div>
-                            <p className="text-white/60 font-medium">沒有任務</p>
+                            <p className={`${s.textColor} opacity-70 font-medium`}>沒有任務</p>
                           </div>
                         )}
                         {todos.filter(t => {
@@ -866,6 +885,21 @@ function App() {
             </DragOverlay>
           </DndContext>
         )}
+
+        {/* 浮動新增按鈕 (FAB) */}
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full shadow-2xl flex items-center justify-center text-white z-50 hover:shadow-indigo-500/50"
+          onClick={() => {
+            setNewCardStatus('pending');
+            setShowNewModal(true);
+          }}
+        >
+          <Plus className="w-8 h-8" />
+        </motion.button>
 
         {/* 新增任務 Modal */}
         {showNewModal && (
@@ -1362,7 +1396,11 @@ function DroppableColumn({ id, label, children }) {
   return (
     <div
       ref={setNodeRef}
-      className={`transition-all duration-200 ${isOver ? 'scale-105' : ''}`}
+      className={`transition-all duration-200 ${
+        isOver
+          ? 'scale-105 ring-4 ring-indigo-400/50 bg-indigo-50/20 rounded-2xl'
+          : ''
+      }`}
     >
       {children}
     </div>
@@ -1395,7 +1433,7 @@ function DraggableTodo({ todo, onEdit, onDelete }) {
           <span className="text-indigo-600">{todo.project_code}</span> 
           <span className="font-normal text-gray-500 ml-1">[{todo.task_type}]</span>
         </div>
-        <div className="text-xs text-gray-700 leading-relaxed">
+        <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
           {todo.description}
         </div>
       </div>
@@ -1404,7 +1442,7 @@ function DraggableTodo({ todo, onEdit, onDelete }) {
       {isHovered && !isDragging && (
         <div className="absolute top-2 right-2 flex gap-1 bg-white/90 backdrop-blur-sm rounded-lg p-1 shadow-lg z-10">
           <button 
-            className="btn btn-primary btn-xs"
+            className="p-1 hover:bg-blue-50 text-blue-600 rounded-md transition-colors duration-200"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { 
               e.stopPropagation(); 
@@ -1413,10 +1451,10 @@ function DraggableTodo({ todo, onEdit, onDelete }) {
             }}
             title="編輯"
           >
-            ✏️
+            <Edit className="w-4 h-4" />
           </button>
           <button 
-            className="btn btn-error btn-xs"
+            className="p-1 hover:bg-red-50 text-red-600 rounded-md transition-colors duration-200"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { 
               e.stopPropagation(); 
@@ -1425,7 +1463,7 @@ function DraggableTodo({ todo, onEdit, onDelete }) {
             }}
             title="刪除"
           >
-            🗑️
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       )}
